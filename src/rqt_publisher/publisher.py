@@ -85,7 +85,7 @@ class Publisher(Plugin):
         # create context for the expression eval statement
         self._eval_locals = {'i': 0}
         self._eval_locals["now"] = self._get_time
-        for module in (math, random, time):
+        for module in (math, random, time, array):
             self._eval_locals.update(module.__dict__)
         del self._eval_locals['__name__']
         del self._eval_locals['__doc__']
@@ -214,6 +214,9 @@ class Publisher(Plugin):
 
     def _change_publisher_expression(self, publisher_info, topic_name, new_value):
         expression = str(new_value)
+        print(publisher_info)
+        print('Topic Name! ', topic_name)
+        print('Expression: ', expression)
         if len(expression) == 0:
             if topic_name in publisher_info['expressions']:
                 del publisher_info['expressions'][topic_name]
@@ -223,21 +226,30 @@ class Publisher(Plugin):
         else:
             # Strip topic name from the full topic path
             slot_path = topic_name.replace(publisher_info['topic_name'], '', 1)
+            
+            print(slot_path)
             slot_path, slot_array_index = self._extract_array_info(slot_path)
+            print(slot_path)
+            print(slot_array_index)
 
             # Get the property type from the message class
             slot_type, is_array = \
                 get_slot_type(publisher_info['message_instance'].__class__, slot_path)
+            print('slot_type ', slot_type)
+            print('Is Array? ', is_array)
             if slot_array_index is not None:
                 is_array = False
 
             if is_array:
-                slot_type = list
+                # slot_type = list
+                # slot_type = array.array
+                slot_type = array.array('B').__class__
             # strip possible trailing error message from expression
             error_prefix = '# error'
             error_prefix_pos = expression.find(error_prefix)
             if error_prefix_pos >= 0:
                 expression = expression[:error_prefix_pos]
+            print('Calling evaluate_expression')
             success, _ = self._evaluate_expression(expression, slot_type)
             if success:
                 old_expression = publisher_info['expressions'].get(topic_name, None)
@@ -259,6 +271,7 @@ class Publisher(Plugin):
                     expression, error_prefix, slot_type.__name__)
 
     def _extract_array_info(self, type_str):
+        print("in _extrat_array_info " + type_str)
         array_size = None
         if '[' in type_str and type_str[-1] == ']':
             type_str, array_size_str = type_str.split('[', 1)
@@ -300,7 +313,12 @@ class Publisher(Plugin):
         successful_eval = True
         try:
             # try to evaluate expression
+            print('Trying to evaluate locals!')
+            print('Expression ', expression)
             value = eval(expression, {}, self._eval_locals)
+            print('Value: ', value)
+            print('Value Type:', value.__class__)
+            print('Slot Type: ', slot_type)
         except Exception as e:
             qWarning('Python eval failed for expression "{}"'.format(expression) +
                      ' with an exception "{}"'.format(e))
@@ -315,13 +333,19 @@ class Publisher(Plugin):
             successful_eval = True
 
         elif successful_eval:
+            print('Successful Eval!')
             type_set = set((slot_type, type(value)))
+            print('Type Set: ', type_set)
             # check if value's type and slot_type belong to the same type group, i.e. array types,
             # numeric types and if they do, make sure values's type is converted to the exact
             # slot_type
+            print('First Test: ', type_set <= set(_list_types))
+            print('Second Test: ', type_set <= set(_numeric_types))
             if type_set <= set(_list_types) or type_set <= set(_numeric_types):
                 # convert to the right type
-                value = slot_type(value)
+                if slot_type != array.array('B').__class__:
+                    value = slot_type(value)
+                # value = slot_type(expression)
 
         if successful_eval and isinstance(value, slot_type):
             return True, value
