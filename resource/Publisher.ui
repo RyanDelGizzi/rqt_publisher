@@ -35,7 +35,7 @@
         </sizepolicy>
        </property>
        <property name="text">
-        <string>Topic</string>
+        <string>Topic!</string>
        </property>
       </widget>
      </item>
